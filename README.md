@@ -1,5 +1,9 @@
 # lazyrail
-Makes Above Ground Trains Work Better<br><br>
+Makes Above Ground Trains Work Better<br>
+Disables Collision Damage On Them So Ground And Tight Corners Dont Destroy It As Its Moving<br>
+Disables Decay On Auto Spawned Trains<br>
+Give Auto Spawn Trains Unlimited Fuel<br>
+<br>
 ChatCommands<br>
 lazyrail.spawn 0 (Spawns Workcart On Admin Location)<br>
 lazyrail.spawn 1 (Spawns Above Ground Train On Admin Location)<br>
