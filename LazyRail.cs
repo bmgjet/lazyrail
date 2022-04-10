@@ -15,6 +15,8 @@ namespace Oxide.Plugins
 		public bool AllowWorkCarts = true;
 		public bool AllowAboveGroundCarts = true;
 		public bool DisablePlayerViolationsWhenOnTrain = true;
+		public bool DisablePlayerSuicideWhenOnTrain = true;
+		private const string permSpawn = "LazyRail.spawn";
 
 		public List<BaseEntity> Trains = new List<BaseEntity>();
 		public List<Vector3> RailPath = new List<Vector3>();
@@ -27,28 +29,15 @@ namespace Oxide.Plugins
 
 		#region Commands
 		[ChatCommand("lazyrail.spawn")]
-		private void ManualSpawn(BasePlayer player, string command, string[] args) { if (player.IsAdmin) { BaseEntity Train = TrainSpawn(player.transform.position, int.Parse(args[0])); if (Train != null) { Trains.Add(Train); } } }
+		private void ManualSpawn(BasePlayer player, string command, string[] args){if (!permission.UserHasPermission(player.UserIDString, permSpawn)){return;}{ BaseEntity Train = TrainSpawn(player.transform.position, int.Parse(args[0])); if (Train != null) { Trains.Add(Train); } } }
 		[ChatCommand("lazyrail.showpath")]
 		private void DrawPath(BasePlayer player) { if (player.IsAdmin) { foreach (Vector3 vector in RailPath) { if (Vector3.Distance(vector, player.transform.position) > 400) { continue; } Color c = Color.blue; if (vector.y < TerrainMeta.HeightMap.GetHeight(vector)) { c = Color.red; } player.SendConsoleCommand("ddraw.sphere", 8f, c, vector, 1f); } } }
 		#endregion
 
 		#region Hooks
-
-		private object OnPlayerViolation(BasePlayer player, AntiHackType type, float amount)
-		{
-			if (DisablePlayerViolationsWhenOnTrain && player != null )			
-			{
-				BaseEntity be = player.GetParentEntity();
-				if(be != null && Trains.Contains(be))
-				if (type == AntiHackType.InsideTerrain) return false;
-				if (type == AntiHackType.NoClip) return false;
-				if (type == AntiHackType.FlyHack) return false;
-			}
-			return null;
-		}
-
 		private void Init()
 		{
+			permission.RegisterPermission(permSpawn, this);
 			plugin = this;
 		}
 
@@ -66,6 +55,33 @@ namespace Oxide.Plugins
 			plugin = null;
 		}
 
+		private object OnPlayerViolation(BasePlayer player, AntiHackType type, float amount)
+		{
+			if (DisablePlayerViolationsWhenOnTrain && player != null)
+			{
+				BaseEntity be = player.GetParentEntity();
+				if (be != null && Trains.Contains(be))
+				{
+					if (type == AntiHackType.InsideTerrain) return false;
+					if (type == AntiHackType.NoClip) return false;
+					if (type == AntiHackType.FlyHack) return false;
+				}
+			}
+			return null;
+		}
+
+		private object OnEntityTakeDamage(BasePlayer player, HitInfo hitInfo)
+		{
+			if (DisablePlayerSuicideWhenOnTrain && player != null || hitInfo != null)
+			{
+				Rust.DamageType damageType = hitInfo.damageTypes.GetMajorityDamageType();
+				if (damageType != Rust.DamageType.Suicide) return null;
+				BaseEntity be = player.GetParentEntity();
+				if (be != null && Trains.Contains(be)) { return false; }
+			}
+			return null;
+		}
+
 		private object OnEntityTakeDamage(BaseCombatEntity bce, HitInfo info)
 		{
 			if (bce == null || Trains == null || info == null || bce.net == null) { return null; }
@@ -79,7 +95,7 @@ namespace Oxide.Plugins
 			return null;
 		}
 
-		private void OnEntityDeath(BaseCombatEntity entity, HitInfo info) { if (entity != null && info != null) { if (entity is TrainEngine) { if (Trains.Contains(entity)) { Trains.Remove(entity); } } } }
+		private void OnEntityDeath(BaseCombatEntity entity, HitInfo info) { if (entity != null && info != null) { if (Trains.Contains(entity)) { Trains.Remove(entity);  } } }
 		#endregion
 
 		#region Functions
