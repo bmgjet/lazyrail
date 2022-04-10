@@ -1,8 +1,13 @@
 # lazyrail
-Makes Above Ground Trains Work Better<br>
-Disables Collision Damage On Them So Ground And Tight Corners Dont Destroy It As Its Moving<br>
+Makes Above Ground Trains Work Even On A Trash Rail Ring<br>
+Disables Collision For Everything But Vehicles<br>
 Disables Decay On Auto Spawned Trains<br>
 Give Auto Spawn Trains Unlimited Fuel<br>
+Trains Follow Nodes Not Mesh<br>
+Block Voilations And UnderGround Death<br>
+<br>
+Permission<br>
+LazyRail.spawn (Needed to use spawn commands)<br>
 <br>
 ChatCommands<br>
 lazyrail.spawn 0 (Spawns Workcart On Admin Location)<br>
