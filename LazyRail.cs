@@ -12,12 +12,13 @@ namespace Oxide.Plugins
 	{
 		#region Variables
 		public int TrainAmount = 1;
-		public bool AllowWorkCarts = true;
+		public bool AllowWorkCarts = false;
 		public bool AllowAboveGroundCarts = true;
 
 		public List<BaseEntity> Trains = new List<BaseEntity>();
 		public List<Vector3> RailPath = new List<Vector3>();
 		private Timer spawner;
+		public static LazyRail plugin;
 
 		private string WorkCartPrefab = "assets/content/vehicles/workcart/workcart.entity.prefab";
 		private string AboveGroundTrainPrefab = "assets/content/vehicles/traintemp/trainenginetemp.entity.prefab";
@@ -25,12 +26,18 @@ namespace Oxide.Plugins
 
 		#region Commands
 		[ChatCommand("lazyrail.spawn")]
-		private void ManualSpawn(BasePlayer player, string command, string[] args) { if (player.IsAdmin) {BaseEntity Train = TrainSpawn(player.transform.position, int.Parse(args[0])); if (Train != null) { Trains.Add(Train); } } }
+		private void ManualSpawn(BasePlayer player, string command, string[] args) { if (player.IsAdmin) { BaseEntity Train = TrainSpawn(player.transform.position, int.Parse(args[0])); if (Train != null) { Trains.Add(Train); } } }
 		[ChatCommand("lazyrail.showpath")]
 		private void DrawPath(BasePlayer player) { if (player.IsAdmin) { foreach (Vector3 vector in RailPath) { if (Vector3.Distance(vector, player.transform.position) > 400) { continue; } Color c = Color.blue; if (vector.y < TerrainMeta.HeightMap.GetHeight(vector)) { c = Color.red; } player.SendConsoleCommand("ddraw.sphere", 8f, c, vector, 1f); } } }
 		#endregion
 
 		#region Hooks
+
+		private void Init()
+		{
+			plugin = this;
+		}
+
 		private void OnServerInitialized()
 		{
 			ServerMgr.Instance.StartCoroutine(GeneratRailGrid());
@@ -42,6 +49,7 @@ namespace Oxide.Plugins
 		{
 			foreach (BaseEntity be in Trains) { if (be != null && !be.IsDestroyed) be.Kill(); }
 			if (spawner != null) { spawner.Destroy(); }
+			plugin = null;
 		}
 
 		private object OnEntityTakeDamage(BaseCombatEntity bce, HitInfo info)
@@ -57,7 +65,7 @@ namespace Oxide.Plugins
 			return null;
 		}
 
-		private void OnEntityDeath(BaseCombatEntity entity, HitInfo info){if (entity != null && info != null) { if (entity is TrainEngine) { if (Trains.Contains(entity)) { Trains.Remove(entity); } } }}
+		private void OnEntityDeath(BaseCombatEntity entity, HitInfo info) { if (entity != null && info != null) { if (entity is TrainEngine) { if (Trains.Contains(entity)) { Trains.Remove(entity); } } } }
 		#endregion
 
 		#region Functions
@@ -87,12 +95,11 @@ namespace Oxide.Plugins
 			baseEntity.globalBroadcast = true;
 			baseEntity.enableSaving = false;
 			baseEntity.Spawn();
-			Puts("Spawned "+TrainType+" @ " + baseEntity.transform.position.ToString());
+			Puts("Spawned " + TrainType + " @ " + baseEntity.transform.position.ToString());
 			TrainEngine te = baseEntity as TrainEngine;
 			te.collisionEffect.guid = null;
 			te.idleFuelPerSec = 0f;
 			te.maxFuelPerSec = 0f;
-			NextFrame(() => {te.CancelInvoke("DecayTick");});
 			TrainCar tc = baseEntity as TrainCar;
 			tc.derailCollisionForce = 0f;
 			StorageContainer fuelContainer = te.GetFuelSystem()?.GetFuelContainer();
@@ -101,6 +108,7 @@ namespace Oxide.Plugins
 				fuelContainer.inventory.AddItem(fuelContainer.allowedItem, 1);
 				fuelContainer.SetFlag(BaseEntity.Flags.Locked, true);
 			}
+			Lazy Fix = baseEntity.gameObject.AddComponent<Lazy>();
 			return baseEntity;
 		}
 
@@ -146,24 +154,129 @@ namespace Oxide.Plugins
 			{
 				case -1:
 				case 0:
-					if (AllowWorkCarts){prefab = WorkCartPrefab;}
+					if (AllowWorkCarts) { prefab = WorkCartPrefab; }
 					break;
 				case 1:
 				case 2:
-					if (AllowAboveGroundCarts){prefab = AboveGroundTrainPrefab;}
+					if (AllowAboveGroundCarts) { prefab = AboveGroundTrainPrefab; }
 					break;
 			}
-			if(prefab == "")
-            {
-				if (AllowWorkCarts){prefab = WorkCartPrefab;}
-				else if (AllowAboveGroundCarts){prefab = AboveGroundTrainPrefab;}
+			if (prefab == "")
+			{
+				if (AllowWorkCarts) { prefab = WorkCartPrefab; }
+				else if (AllowAboveGroundCarts) { prefab = AboveGroundTrainPrefab; }
 				else { return null; }
 			}
-			if(prefab == AboveGroundTrainPrefab){TrainType = "Above Ground Train";}
-			else{TrainType = "Workcart";}
+			if (prefab == AboveGroundTrainPrefab) { TrainType = "Above Ground Train"; }
+			else { TrainType = "Workcart"; }
 			BaseEntity baseEntity = GameManager.server.CreateEntity(prefab, dropPosition, Quaternion.identity, true);
 			return setup(baseEntity, TrainType);
 		}
 		#endregion
+
+		private class Lazy : MonoBehaviour
+		{
+			public BaseEntity _train;
+			public TrainEngine _trainEngine;
+			public TrainCar _trainCar;
+			public float CurrentSpeed = 0;
+
+			private void Awake()
+			{
+				_train = GetComponent<BaseEntity>();
+				_trainEngine = _train as TrainEngine;
+				_trainCar = _train as TrainCar;
+				_trainCar.frontCollisionTrigger.interestLayers = Layers.Mask.Vehicle_World;
+				_trainCar.rearCollisionTrigger.interestLayers = Layers.Mask.Vehicle_World;
+				plugin.NextFrame(() => { _trainEngine.CancelInvoke("DecayTick"); });
+			}
+
+			private void OnDestroy()
+			{
+				try
+				{
+					enabled = false;
+					CancelInvoke();
+
+					if (_train != null && !_train.IsDestroyed) { _train.Kill(); }
+				}
+				catch { }
+			}
+
+			public void Die() { if (this != null) { Destroy(this); } }
+
+			public void movetrain()
+			{
+				Vector3 Direction = base.transform.forward;
+				TrainTrackSpline preferredAltTrack = (_trainCar.RearTrackSection != _trainCar.FrontTrackSection) ? _trainCar.RearTrackSection : null;
+				TrainTrackSpline trainTrackSpline;
+				bool flag;
+				_trainCar.FrontWheelSplineDist = _trainCar.FrontTrackSection.GetSplineDistAfterMove(_trainCar.FrontWheelSplineDist, Direction, 1, _trainCar.curTrackSelection, out trainTrackSpline, out flag, preferredAltTrack);
+				Vector3 targetFrontWheelTangent;
+				Vector3 positionAndTangent = trainTrackSpline.GetPositionAndTangent(_trainCar.FrontWheelSplineDist, Direction, out targetFrontWheelTangent);
+				_trainCar.SetTheRestFromFrontWheelData(ref trainTrackSpline, positionAndTangent, targetFrontWheelTangent);
+				_trainCar.FrontTrackSection = trainTrackSpline;
+				float frontWheelSplineDist;
+				if (TrainTrackSpline.TryFindTrackNearby(_trainCar.GetFrontWheelPos(), 2f, out trainTrackSpline, out frontWheelSplineDist) && trainTrackSpline.HasClearTrackSpaceNear(_trainCar))
+				{
+					_trainCar.FrontWheelSplineDist = frontWheelSplineDist;
+					Vector3 positionAndTangent2 = trainTrackSpline.GetPositionAndTangent(_trainCar.FrontWheelSplineDist, Direction, out targetFrontWheelTangent);
+					_trainCar.SetTheRestFromFrontWheelData(ref trainTrackSpline, positionAndTangent2, targetFrontWheelTangent);
+					_trainCar.FrontTrackSection = trainTrackSpline;
+					return;
+				}
+			}
+
+			public void FixedUpdate()
+			{
+				if (_train == null) { return; }
+				Vector3 test0 = _trainCar.GetFrontWheelPos();
+				Vector3 test1 = _trainCar.GetRearWheelPos();
+				Vector3 test2 = plugin.RailPath[plugin.RailPath.Count - 1];
+				Vector3 test3 = plugin.RailPath[0];
+				test0.y = 0; test1.y = 0; test2.y = 0; test3.y = 0;
+				if (Vector3.Distance(test1, test2) < 0.1f)
+				{
+					if (_trainCar.TrackSpeed < 0 || _trainEngine.GetThrottleFraction() < 0)
+					{
+						_trainCar.transform.position = plugin.RailPath[5];
+						movetrain();
+						_trainCar.TrackSpeed = CurrentSpeed;
+						return;
+					}
+				}
+				else if (Vector3.Distance(test0, test3) < 0.1f)
+				{
+					if (_trainCar.TrackSpeed >= 0 || _trainEngine.GetThrottleFraction() >= 0)
+					{
+						_trainCar.transform.position = plugin.RailPath[plugin.RailPath.Count - 5];
+						movetrain();
+						_trainCar.TrackSpeed = CurrentSpeed;
+						return;
+					}
+				}
+				else if (Vector3.Distance(test0, test2) < 0.1f)
+				{
+					if (_trainCar.TrackSpeed >= 0 || _trainEngine.GetThrottleFraction() >= 0)
+					{
+						_trainCar.transform.position = plugin.RailPath[5];
+						movetrain();
+						_trainCar.TrackSpeed = CurrentSpeed;
+						return;
+					}
+				}
+				else if (Vector3.Distance(test1, test3) < 0.1f)
+				{
+					if (_trainCar.TrackSpeed <= 0 || _trainEngine.GetThrottleFraction() <= 0)
+					{
+						_trainCar.transform.position = plugin.RailPath[plugin.RailPath.Count - 5];
+						movetrain();
+						_trainCar.TrackSpeed = CurrentSpeed;
+						return;
+					}
+				}
+				CurrentSpeed = _trainCar.TrackSpeed;
+			}
+		}
 	}
 }
