@@ -12,8 +12,9 @@ namespace Oxide.Plugins
 	{
 		#region Variables
 		public int TrainAmount = 1;
-		public bool AllowWorkCarts = false;
+		public bool AllowWorkCarts = true;
 		public bool AllowAboveGroundCarts = true;
+		public bool DisablePlayerViolationsWhenOnTrain = true;
 
 		public List<BaseEntity> Trains = new List<BaseEntity>();
 		public List<Vector3> RailPath = new List<Vector3>();
@@ -32,6 +33,19 @@ namespace Oxide.Plugins
 		#endregion
 
 		#region Hooks
+
+		private object OnPlayerViolation(BasePlayer player, AntiHackType type, float amount)
+		{
+			if (DisablePlayerViolationsWhenOnTrain && player != null )			
+			{
+				BaseEntity be = player.GetParentEntity();
+				if(be != null && Trains.Contains(be))
+				if (type == AntiHackType.InsideTerrain) return false;
+				if (type == AntiHackType.NoClip) return false;
+				if (type == AntiHackType.FlyHack) return false;
+			}
+			return null;
+		}
 
 		private void Init()
 		{
@@ -189,6 +203,7 @@ namespace Oxide.Plugins
 				_trainCar.frontCollisionTrigger.interestLayers = Layers.Mask.Vehicle_World;
 				_trainCar.rearCollisionTrigger.interestLayers = Layers.Mask.Vehicle_World;
 				plugin.NextFrame(() => { _trainEngine.CancelInvoke("DecayTick"); });
+				_trainCar.FrontTrackSection.isStation = true;
 			}
 
 			private void OnDestroy()
@@ -230,6 +245,7 @@ namespace Oxide.Plugins
 			public void FixedUpdate()
 			{
 				if (_train == null) { return; }
+				if(_trainCar.TrackSpeed == 0) { return; }
 				Vector3 test0 = _trainCar.GetFrontWheelPos();
 				Vector3 test1 = _trainCar.GetRearWheelPos();
 				Vector3 test2 = plugin.RailPath[plugin.RailPath.Count - 1];
