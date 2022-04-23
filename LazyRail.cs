@@ -16,6 +16,7 @@ namespace Oxide.Plugins
 		public bool AllowAboveGroundCarts = true;
 		public bool DisablePlayerViolationsWhenOnTrain = true;
 		public bool DisablePlayerSuicideWhenOnTrain = true;
+		public bool TrainUnlimitedFuel = true;
 		private const string permSpawn = "LazyRail.spawn";
 
 		public List<BaseEntity> Trains = new List<BaseEntity>();
@@ -29,7 +30,7 @@ namespace Oxide.Plugins
 
 		#region Commands
 		[ChatCommand("lazyrail.spawn")]
-		private void ManualSpawn(BasePlayer player, string command, string[] args){if (!permission.UserHasPermission(player.UserIDString, permSpawn)){return;}{ BaseEntity Train = TrainSpawn(player.transform.position, int.Parse(args[0])); if (Train != null) { Trains.Add(Train); } } }
+		private void ManualSpawn(BasePlayer player, string command, string[] args) { if (!permission.UserHasPermission(player.UserIDString, permSpawn)) { return; } { BaseEntity Train = TrainSpawn(player.transform.position, int.Parse(args[0])); if (Train != null) { Trains.Add(Train); } } }
 		[ChatCommand("lazyrail.showpath")]
 		private void DrawPath(BasePlayer player) { if (player.IsAdmin) { foreach (Vector3 vector in RailPath) { if (Vector3.Distance(vector, player.transform.position) > 400) { continue; } Color c = Color.blue; if (vector.y < TerrainMeta.HeightMap.GetHeight(vector)) { c = Color.red; } player.SendConsoleCommand("ddraw.sphere", 8f, c, vector, 1f); } } }
 		#endregion
@@ -95,7 +96,7 @@ namespace Oxide.Plugins
 			return null;
 		}
 
-		private void OnEntityDeath(BaseCombatEntity entity, HitInfo info) { if (entity != null && info != null) { if (Trains.Contains(entity)) { Trains.Remove(entity);  } } }
+		private void OnEntityDeath(BaseCombatEntity entity, HitInfo info) { if (entity != null && info != null) { if (Trains.Contains(entity)) { Trains.Remove(entity); } } }
 		#endregion
 
 		#region Functions
@@ -210,32 +211,41 @@ namespace Oxide.Plugins
 			public TrainEngine _trainEngine;
 			public TrainCar _trainCar;
 			public float CurrentSpeed = 0;
-
 			private void Awake()
 			{
-				_train = GetComponent<BaseEntity>();
-				_trainEngine = _train as TrainEngine;
-				_trainCar = _train as TrainCar;
-				_trainCar.frontCollisionTrigger.interestLayers = Layers.Mask.Vehicle_World;
-				_trainCar.rearCollisionTrigger.interestLayers = Layers.Mask.Vehicle_World;
-				plugin.NextFrame(() => { _trainEngine.CancelInvoke("DecayTick"); });
-				_trainCar.FrontTrackSection.isStation = true;
+				plugin.NextFrame(() =>
+				{
+					try { _train = GetComponent<BaseEntity>(); } catch { }
+					if (_train == null) { return; }
+					_trainEngine = _train as TrainEngine;
+					if (_trainEngine == null) { return; }
+					_trainEngine.collisionEffect.guid = null;
+					_trainCar = _train as TrainCar;
+					if (_trainCar == null) { return; }
+					_trainCar.frontCollisionTrigger.interestLayers = Rust.Layers.Mask.Vehicle_World;
+					_trainCar.rearCollisionTrigger.interestLayers = Rust.Layers.Mask.Vehicle_World;
+					plugin.NextFrame(() => { if (_trainEngine != null) _trainEngine.CancelInvoke("DecayTick"); });
+					if (plugin.TrainUnlimitedFuel)
+					{
+						_trainEngine.idleFuelPerSec = 0f;
+						_trainEngine.maxFuelPerSec = 0f;
+						StorageContainer fuelContainer = _trainEngine.GetFuelSystem()?.GetFuelContainer();
+						if (fuelContainer != null)
+						{
+							fuelContainer.inventory.AddItem(fuelContainer.allowedItem, 1);
+							fuelContainer.SetFlag(BaseEntity.Flags.Locked, true);
+						}
+					}
+					_trainCar.TrackSpeed = 0;
+					_trainCar.FrontTrackSection.isStation = true;
+				});
 			}
-
 			private void OnDestroy()
 			{
-				try
-				{
-					enabled = false;
-					CancelInvoke();
-
-					if (_train != null && !_train.IsDestroyed) { _train.Kill(); }
-				}
-				catch { }
+				enabled = false;
+				CancelInvoke();
 			}
-
 			public void Die() { if (this != null) { Destroy(this); } }
-
 			public void movetrain()
 			{
 				Vector3 Direction = base.transform.forward;
@@ -257,11 +267,10 @@ namespace Oxide.Plugins
 					return;
 				}
 			}
-
 			public void FixedUpdate()
 			{
-				if (_train == null) { return; }
-				if(_trainCar.TrackSpeed == 0) { return; }
+				if (_train == null || _trainEngine == null || _trainCar == null || !_trainEngine.AnyPlayersOnTrain()) { return; }
+				if (_trainCar.TrackSpeed == 0) { return; }
 				Vector3 test0 = _trainCar.GetFrontWheelPos();
 				Vector3 test1 = _trainCar.GetRearWheelPos();
 				Vector3 test2 = plugin.RailPath[plugin.RailPath.Count - 1];
