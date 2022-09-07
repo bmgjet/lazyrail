@@ -5,3 +5,5 @@ Disables Decay On Auto Spawned Trains<br>
 Give Auto Spawn Trains Unlimited Fuel<br>
 Trains Follow Nodes Not Mesh<br>
 Block Voilations And UnderGround Death<br>
+Detect side rails by length<br>
+Spawns trains and wagons on side rails.
