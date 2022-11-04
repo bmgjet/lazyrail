@@ -19,7 +19,7 @@ namespace Oxide.Plugins
 		public int SidingMinLength = 20;
 		public int SidingMaxLength = 50;
 		public bool ShowDebug = false;
-		public List<string> wagons = new List<string>() { "assets/content/vehicles/train/trainwagonunloadable.entity.prefab", "assets/content/vehicles/train/trainwagonunloadablefuel.entity.prefab", "assets/content/vehicles/train/trainwagonunloadableloot.entity.prefab", };
+		public List<string> wagons = new List<string>() { "assets/content/vehicles/trains/caboose/traincaboose.entity.prefab", "assets/content/vehicles/trains/wagons/trainwagonunloadable.entity.prefab", "assets/content/vehicles/trains/wagons/trainwagonunloadablefuel.entity.prefab", "assets/content/vehicles/trains/wagons/trainwagonunloadableloot.entity.prefab", };
 		public List<TrainCar> trains = new List<TrainCar>();
 		private List<Coroutine> Threads = new List<Coroutine>();
 		private List<Vector3> railnodes = new List<Vector3>();
@@ -135,7 +135,7 @@ namespace Oxide.Plugins
 		private bool SpawnEntity(Vector3 position)
 		{
 			string prefab;
-			if (Spawned >= WagonsPerTrain) { prefab = "assets/content/vehicles/locomotive/locomotive.entity.prefab"; Spawned = 0; }
+			if (Spawned >= WagonsPerTrain) { prefab = "assets/content/vehicles/trains/locomotive/locomotive.entity.prefab"; Spawned = 0; }
 			else { prefab = wagons.GetRandom(); }
 			TrainCar trainCar = GameManager.server.CreateEntity(prefab, position) as TrainCar;
 			trainCar.enableSaving = false;
